@@ -1,0 +1,176 @@
+---
+title: "Reproducible Research - Project 1"
+author: "NML DesJardins"
+date: "August 11, 2015"
+output: html_document
+---
+
+# Loading and preprocessing the data  
+
+**Load the data:**  
+
+```{r}
+setwd("~/Downloads")
+data<-read.csv("activity.csv", na.strings="NA")
+head(data)
+```
+
+**Reformat date from factor to date:**  
+
+```{r}
+data$date<-as.Date(data$date)
+str(data)
+```
+
+# What is mean total number of steps taken per day?
+
+**Compute the total number of steps per day:**  
+
+```{r, message=F, warning=F}
+library(dplyr)
+steps.per.date<-data%>%
+        group_by(date)%>%
+        do({
+               x<-as.data.frame(sum(.$steps,na.rm=T))
+        })
+colnames(steps.per.date)<-c("date", "total_steps")
+steps.per.date
+```
+
+**Make a historgram of the total number of steps taken each day:**  
+
+```{r}
+hist(steps.per.date$total_steps, main="Number of Steps per Day", xlab="Steps", 
+     col="purple")
+```
+
+```{r}
+mean.steps<-round(mean(steps.per.date$total_steps, na.rm=T))
+median.steps<-median(steps.per.date$total_steps,na.rm=T)
+hilo<-ifelse(mean.steps>median.steps, "lower","higher")
+```
+
+**On average, this person took `r mean.steps` steps per day. The median number of 
+steps was somewhat `r hilo`, at `r median.steps` steps per day.**  
+
+******
+
+# What is the average daily activity pattern?  
+
+**Compute average number of steps within each interval:**  
+
+```{r}
+steps.per.interval<-data%>%
+        group_by(interval)%>%
+        do({
+               x<-as.data.frame(mean(.$steps,na.rm=T))
+        })
+colnames(steps.per.interval)<-c("interval", "avg_steps")
+steps.per.interval
+```
+
+**Time series plot of average steps per interval, across all days:**  
+
+```{r}
+with(steps.per.interval, plot(interval, avg_steps, type="l", xlab="Interval", 
+                              ylab="Average Number of Steps", 
+                              main="Number of Steps by Time of Day", col="purple"))
+```
+
+```{r}
+maxstep<-steps.per.interval[which(steps.per.interval$avg_steps==
+                                          max(steps.per.interval$avg_steps)),]
+```
+
+**On average, this person took the most steps during the interval at `r maxstep$interval`.**    
+  
+******
+
+# Imputing Missing Values   
+
+```{r}
+nmiss<-table(is.na(data))[2]
+```
+
+**There are a total of `r nmiss` missing values in the dataset.**  
+  
+    
+**Impute missing values with the mean for that interval to create a new dataset:** 
+  
+```{r}
+data.mi<-merge(data,steps.per.interval)
+data.mi$steps=with(data.mi,ifelse(is.na(steps==T),avg_steps,steps))
+table(is.na(data.mi))
+head(data.mi)
+```
+
+**Compute total number of steps each day:**  
+```{r}
+steps.per.date.mi<-data.mi%>%
+        group_by(date)%>%
+        do({
+               x<-as.data.frame(sum(.$steps))
+        })
+colnames(steps.per.date.mi)<-c("date", "total_steps_mi")
+steps.per.date.mi
+```
+
+
+**Histogram of the total number of steps each day:**  
+```{r}
+with(steps.per.date.mi,hist(total_steps_mi, main="Number of Steps per Day", 
+                            xlab="Steps (mean imputed)", col="blue"))
+                            
+```
+```{r}
+options(scipen=999)
+mean.steps.mi<-round(mean(steps.per.date.mi$total_steps_mi))
+median.steps.mi<-round(median(steps.per.date.mi$total_steps_mi))
+
+hilo.mi<-ifelse(mean.steps.mi>median.steps.mi,"higher than",
+                ifelse(mean.steps.mi<median.steps.mi,"lower than","equal to"))
+
+skew<-ifelse(hilo.mi=="equal to", "The mean and median are now equivalent, 
+             indicating that the data are no longer skewed.","As in the raw data, 
+             the mean and median are not equivalent, indicating that the data 
+             are still at least somewhat skewed.")
+
+hilo_mean<-ifelse(mean.steps.mi>mean.steps, "higher than",
+                  ifelse(mean.steps.mi<mean.steps,"lower than", "equal to"))
+hilo_mdn<-ifelse(median.steps.mi>median.steps, "higher than",
+                 ifelse(median.steps.mi<median.steps,"lower than","equal to"))
+
+```
+**After replacing missing values with the means for each interval, this person took, on average, `r mean.steps.mi` steps per day, which is `r hilo_mean` the mean obtained from the raw data. The median number of steps (after mean imputation) was `r median.steps.mi`, which is `r hilo_mdn` the median obtained from the raw data. `r skew`**  
+  
+    
+******
+
+# Differences in activity patterns between weekends and weekdays  
+  
+**Create a factor variable for weekdays vs. weekends:**  
+```{r}
+data.mi$daytype<-as.factor(with(data.mi, ifelse(weekdays(data$date)=="Sunday"| 
+                                              weekdays(data$date)=="Saturday",
+                                      "weekend","weekday")))
+str(data.mi$daytype)
+```
+
+
+**Compute the mean number of steps for each interval across weekdays or weekends:**  
+```{r}
+steps.int.day<-data.mi%>%
+        group_by(daytype,interval)%>%
+        do({
+               x<-as.data.frame(mean(.$steps))
+        })
+colnames(steps.int.day)<-c("daytype","interval", "avg_steps")
+steps.int.day
+```
+
+**Create a time series plot of the average number of steps on weekdays and weekends:**  
+```{r, message=F, warning=F}
+library(ggplot2)
+p<-ggplot(steps.int.day,aes(interval,avg_steps))
+p + geom_line() + facet_grid(daytype~.) + labs(x = "Interval", y = "Number of steps")
+
